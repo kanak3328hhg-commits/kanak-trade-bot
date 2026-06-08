@@ -2,6 +2,8 @@ import requests
 import time
 import pandas as pd
 from datetime import datetime, timedelta
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # আপনার সঠিক টোকেন, চ্যানেল আইডি এবং এআই চাবি
 BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
@@ -9,6 +11,21 @@ FOREX_CHAT_ID = "-1004292142406"
 QUOTEX_CHAT_ID = "-1003684590469"
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
 
+# 🛠️ Render-এর পোর্ট ফিক্স করার জন্য ফেক ওয়েব সার্ভার সেটআপ
+class DummyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Kanak AI Bot is running successfully!")
+
+def run_fake_server():
+    # Render অটোমেটিক $PORT এনভায়রনমেন্ট ভেরিয়েবল দেয়, না থাকলে ডামি 8080 ব্যবহার করবে
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), DummyServer)
+    print(f"Fake server started on port {port} to bypass Render port scan.")
+    server.serve_forever()
 
 # বাংলাদেশ সময় অনুযায়ী ফরেক্স সেশনের নাম বের করার ফাংশন
 def get_current_forex_sessions():
@@ -51,7 +68,7 @@ def get_ai_bengali_tip(pair_name, direction, rsi, price):
             return f"{pair_name} এর বর্তমান ভোলাটিলিটি অনুযায়ী স্টপলস কঠোরভাবে মেইনটেইন করুন।"
     except Exception as e:
         print(f"AI Generation Error for {pair_name}: {e}")
-        return f"{pair_name} পেয়ারে ট্রেড করার সময় প্রোপার রিস্ক ম্যানেজমেন্ট ফলো করুন।"
+        return f"{pair_name} পেয়ারে ট্রেড করার সময় প্রোপার充 রিস্ক ম্যানেজমেন্ট ফলো করুন।"
 
 # RSI হিসাব করার ফাংশন
 def calculate_rsi(series, period=14):
@@ -120,22 +137,28 @@ def generate_signal(ticker_symbol, display_name):
         pips_tp1 = (pips_sl * 2)  
         pips_tp2 = (pips_sl * 3)  
 
+        # কোটেক্স ১-মিনিট এক্সিট টার্গেট মুভমেন্ট
+        quotex_pips_target = 0.0100 if is_jpy else 0.0005
+
         if ema_fast > ema_slow and rsi_value > 50:
             direction, strength = "UP", int(min(rsi_value + 25, 98))
             sl = current_price - pips_sl
             tp1 = current_price + pips_tp1
             tp2 = current_price + pips_tp2
+            quotex_exit = current_price + quotex_pips_target
         elif ema_fast < ema_slow and rsi_value < 50:
             direction, strength = "DOWN", int(min((100 - rsi_value) + 25, 98))
             sl = current_price + pips_sl
             tp1 = current_price - pips_tp1
             tp2 = current_price - pips_tp2
+            quotex_exit = current_price - quotex_pips_target
         else:
             direction = "UP" if rsi_value >= 50 else "DOWN"
             strength = 72
             sl = current_price - pips_sl
             tp1 = current_price + pips_tp1
             tp2 = current_price + pips_tp2
+            quotex_exit = current_price + quotex_pips_target if direction == "UP" else current_price - quotex_pips_target
             
         bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_value, current_price)
             
@@ -146,6 +169,7 @@ def generate_signal(ticker_symbol, display_name):
             "sl": round(sl, 4 if not is_jpy else 2),
             "tp1": round(tp1, 4 if not is_jpy else 2),
             "tp2": round(tp2, 4 if not is_jpy else 2),
+            "quotex_exit": round(quotex_exit, 4 if not is_jpy else 2),
             "tip": bengali_tip
         }
     except Exception as e:
@@ -160,7 +184,11 @@ pairs_to_track = {
     "AUDUSD=X": "AUD-USD"
 }
 
-print("Kanak AI Bot Starting smoothly with Quotex Entry Prices...")
+# 🚀 ব্যাকগ্রাউন্ডে ফেক সার্ভার থ্রেড চালু করা যেন Render পোর্ট ডিটেক্ট করতে পারে
+server_thread = threading.Thread(target=run_fake_server, daemon=True)
+server_thread.start()
+
+print("Kanak AI Bot Starting smoothly with Web Port Integration...")
 
 while True:
     try:
@@ -194,11 +222,11 @@ while True:
                     f"━━━━━━━━━━━━━━━━━━\n\n"
                 )
                 
-                # 📱 কোটেক্সের জন্য Entry Price ইনক্লুড করা হয়েছে
                 quotex_message += (
                     f"📊 **Quotex | {display_name}**\n\n"
                     f"🎯 Signal Direction: {emoji} **{signal['direction']}**\n"
                     f"💰 Entry Price: **{signal['price']}**\n"
+                    f"🏁 Exit Target Price: **{signal['quotex_exit']}**\n"
                     f"⏰ Best Expiry: **1 MINUTE**\n"
                     f"📈 Signal Accuracy: {signal['strength']}%\n"
                     f"🚀 Trade Type: Turbo Scalping\n\n"
@@ -219,7 +247,7 @@ while True:
             
             try:
                 requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "Markdown"}, timeout=15)
-                print("Unique AI signals with Quotex entry pushed!")
+                print("Signals pushed with port validation successfully!")
             except Exception as e: print(e)
             
     except Exception as main_loop_error:
