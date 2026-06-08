@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # আপনার দেওয়া সঠিক টোকেন এবং চ্যানেল আইডি
-BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvyYHRWboyjAuUhg0M"
+BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
 FOREX_CHAT_ID = "@kanak_trade_bd"  
 QUOTEX_CHAT_ID = "@Kanak_quotex_bd"
 
