@@ -2,28 +2,12 @@ import requests
 import time
 import pandas as pd
 from datetime import datetime, timedelta
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# আপনার দেওয়া সঠিক টোকেন, মাইনাসসহ চ্যানেল আইডি এবং এআই চাবি
-BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
+# আপনার সঠিক টোকেন, চ্যানেল আইডি এবং এআই চাবি
+BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvyYHRWboyjAuUhg0M"
 FOREX_CHAT_ID = "-1004292142406"  
 QUOTEX_CHAT_ID = "-1003684590469"
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
-
-# Render-এর Port Timeout এরর এড়ানোর জন্য ডামি ওয়েব সার্ভার সেটআপ
-class DummyServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(b"Kanak AI-Powered Trade Bot is Live and Running!")
-
-def run_dummy_server():
-    import os
-    port = int(os.environ.get("PORT", 10001))
-    server = HTTPServer(("0.0.0.0", port), DummyServer)
-    server.serve_forever()
 
 # বাংলাদেশ সময় অনুযায়ী ফরেক্স সেশনের নাম বের করার ফাংশন
 def get_current_forex_sessions():
@@ -40,34 +24,35 @@ def get_current_forex_sessions():
     if not sessions: return "Live Market"
     return ", ".join(sessions)
 
-# সরাসরি Google Gemini AI ব্যবহার করে লাইভ মার্কেট অনুযায়ী বাংলা টিপস জেনারেট করার ফাংশন
+# সরাসরি Google Gemini AI ব্যবহার করে লাইভ মার্কেট অনুযায়ী ইউনিক বাংলা টিপস জেনারেট করার ফাংশন
 def get_ai_bengali_tip(pair_name, direction, rsi, price):
     try:
-        # Gemini 1.5-flash API Endpoint
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         headers = {'Content-Type': 'application/json'}
         
-        # এআই-কে সঠিক নির্দেশ বা প্রম্পট দেওয়া
+        # প্রম্পট আরও নিখুঁত করা হয়েছে যেন এআই প্রতিবার সম্পূর্ণ ভিন্ন ও ইউনিক টিপস দেয়
         prompt = (
-            f"You are a professional Forex and Binary Options trader. "
-            f"Currently, a {direction} signal is generated for {pair_name} at price {price}. "
-            f"The RSI value is {rsi:.2f}. Based on this market condition, give a single line (max 15-20 words) "
-            f"educational trading tip or caution in professional, easy-to-understand Bengali language for my Telegram subscribers. "
-            f"Do not include any English translation or greetings, just the one-line Bengali tip. Start directly with the tip."
+            f"You are an expert Forex market analyst. "
+            f"Generate a single, unique, and professional one-line trading advice or market structure tip in Bengali for {pair_name}. "
+            f"The current signal is {direction}, entry price is {price}, and RSI is {rsi:.1f}. "
+            f"Give a unique tip (max 15 words) suitable for this specific technical structure. "
+            f"Do not repeat general statements. Start directly with the Bengali text without greetings or quotes."
         )
         
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response = requests.post(url, json=payload, headers=headers, timeout=12)
         
         if response.status_code == 200:
             ai_response = response.json()
             tip_text = ai_response['candidates'][0]['content']['parts'][0]['text'].strip()
+            # এআই যদি কোনো কারণে ইংরেজি বা অতিরিক্ত চিহ্ন দেয় তা ফিল্টার করা
+            tip_text = tip_text.replace('"', '').replace('*', '')
             return tip_text
         else:
-            return "মার্কেট ট্রেন্ড ফলো করুন এবং প্রফিট বুক করতে স্টপ লস ট্রেইল করুন।"
+            return f"{pair_name} এর বর্তমান ভোলাটিলিটি অনুযায়ী স্টপলস কঠোরভাবে মেইনটেইন করুন।"
     except Exception as e:
-        print(f"AI Generation Error: {e}")
-        return "ট্রেন্ডের দিকে নজর রাখুন এবং সঠিক মানি ম্যানেজমেন্ট মেনে ট্রেড করুন।"
+        print(f"AI Generation Error for {pair_name}: {e}")
+        return f"{pair_name} পেয়ারে ট্রেড করার সময় প্রোপার রিস্ক ম্যানেজমেন্ট ফলো করুন।"
 
 # RSI হিসাব করার ফাংশন
 def calculate_rsi(series, period=14):
@@ -153,7 +138,7 @@ def generate_signal(ticker_symbol, display_name):
             tp1 = current_price + pips_tp1
             tp2 = current_price + pips_tp2
             
-        # 🤖 এআই কল করে একদম রিয়েল-টাইম বাংলা টিপস নেওয়া
+        # 🤖 প্রতিটি পেয়ারের জন্য আলাদা আলাদা এআই টিপস কল করা হচ্ছে
         bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_value, current_price)
             
         return {
@@ -177,10 +162,7 @@ pairs_to_track = {
     "AUDUSD=X": "AUD-USD"
 }
 
-server_thread = threading.Thread(target=run_dummy_server, daemon=True)
-server_thread.start()
-
-print("Kanak AI-Powered Bot is fully integrated and starting...")
+print("Kanak AI Bot Starting smoothly...")
 
 while True:
     try:
@@ -237,10 +219,10 @@ while True:
             
             try:
                 requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "Markdown"}, timeout=15)
-                print(f"AI-generated signals pushed to channels successfully!")
+                print("Unique AI signals pushed!")
             except Exception as e: print(e)
             
     except Exception as main_loop_error:
-        print(f"Network issue: {main_loop_error}")
+        print(f"Loop error: {main_loop_error}")
     
     time.sleep(300)
