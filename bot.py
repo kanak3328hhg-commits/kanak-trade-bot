@@ -7,8 +7,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # আপনার দেওয়া সঠিক টোকেন এবং চ্যানেল আইডি
 BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
-FOREX_CHAT_ID = "@kanak_trade_bd"  
-QUOTEX_CHAT_ID = "@Kanak_quotex_bd"
+# আগের পুরানো ইউজারনেম তুলে দিয়ে এই নতুন মাইনাসসহ আইডিগুলো বসান
+FOREX_CHAT_ID = "-1004292142406"  
+QUOTEX_CHAT_ID = "-1003684590469"
 
 # Render-এর Port Timeout এরর এড়ানোর জন্য ডামি ওয়েব সার্ভার সেটআপ
 class DummyServer(BaseHTTPRequestHandler):
