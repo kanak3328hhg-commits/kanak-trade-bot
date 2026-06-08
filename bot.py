@@ -76,10 +76,17 @@ def generate_signal(ticker_symbol):
         ema_slow = float(ema_slow)
         current_price = float(current_price)
 
+       # কারেন্সি পেয়ার JPY (যেমন: USDJPY) নাকি সাধারণ (যেমন: EURUSD) তা চেক করা
         is_jpy = "JPY" in ticker_symbol
+        
+        # ১. রিস্ক বা স্টপ লস (SL) নির্ধারণ: সাধারণ পেয়ারে ৩০ পিপস, JPY পেয়ারে ৩০ পিপস
         pips_sl = 0.0300 if is_jpy else 0.0030   
-        pips_tp1 = 0.0300 if is_jpy else 0.0030  
-        pips_tp2 = 0.0600 if is_jpy else 0.0060  
+        
+        # ২. টেক প্রফিট ১ (TP1) -> রেশিও ১:২ (SL-এর দ্বিগুণ লাভ)
+        pips_tp1 = (pips_sl * 2)  # সাধারণ পেয়ারে ৬০ পিপস লাভ
+        
+        # ৩. টেক প্রফিট ২ (TP2) -> রেশিও ১:৩ (SL-এর তিনগুণ লাভ)
+        pips_tp2 = (pips_sl * 3)  # সাধারণ পেয়ারে ৯০ পিপস লাভ 
 
         if ema_fast > ema_slow and rsi_value > 50:
             direction, strength = "UP", int(min(rsi_value + 25, 98))
