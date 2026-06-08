@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # আপনার দেওয়া সঠিক টোকেন, মাইনাসসহ চ্যানেল আইডি এবং এআই চাবি
-BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvyYHRWboyjAuUhg0M"
+BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
 FOREX_CHAT_ID = "-1004292142406"  
 QUOTEX_CHAT_ID = "-1003684590469"
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
