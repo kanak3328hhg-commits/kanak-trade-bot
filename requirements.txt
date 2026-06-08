@@ -1,4 +1,1 @@
 requests
-pandas==2.2.3
-pandas-ta
-numpy==1.26.4
