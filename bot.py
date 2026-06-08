@@ -2,13 +2,31 @@ import requests
 import time
 import pandas as pd
 from datetime import datetime
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # আপনার দেওয়া সঠিক টোকেন এবং চ্যানেল আইডি
-BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
+BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvyYHRWboyjAuUhg0M"
 FOREX_CHAT_ID = "@kanak_trade_bd"  
 QUOTEX_CHAT_ID = "@Kanak_quotex_bd"
 
-# কোনো লাইব্রেরি ছাড়া খাঁটি পাইথন দিয়ে RSI হিসাব করার ফাংশন
+# Render-এর Port Timeout এরর এড়ানোর জন্য ডামি ওয়েব সার্ভার সেটআপ
+class DummyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Kanak Trade Bot is Live and Running perfectly!")
+
+def run_dummy_server():
+    # Render অটোমেটিক একটি PORT প্রোভাইড করে, না থাকলে ডিফল্ট ১০০০১ পোর্ট ব্যবহার হবে
+    import os
+    port = int(os.environ.get("PORT", 10001))
+    server = HTTPServer(("0.0.0.0", port), DummyServer)
+    print(f"Dummy web server started on port {port} to prevent Render timeout.")
+    server.serve_forever()
+
+# কোনো থার্ড-পার্টি লাইব্রেরি ছাড়া খাঁটি পাইথন দিয়ে RSI হিসাব করার ফাংশন
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).copy()
@@ -17,7 +35,6 @@ def calculate_rsi(series, period=14):
     avg_gain = gain.rolling(window=period).mean()
     avg_loss = loss.rolling(window=period).mean()
     
-    # প্রথম রোলিং এর পরের ভ্যালুগুলোর জন্য স্মুদিং
     for i in range(period, len(series)):
         avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gain.iloc[i]) / period
         avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + loss.iloc[i]) / period
@@ -56,13 +73,12 @@ def generate_signal(ticker_symbol):
         if data.empty or len(data) < 30: 
             return None
 
-        # আমাদের কাস্টম গাণিতিক ফাংশন দিয়ে ইন্ডিকেটর তৈরি
+        # কাস্টম গাণিতিক ফাংশন দিয়ে ইন্ডিকেটর তৈরি
         data['RSI'] = calculate_rsi(data['Close'], period=14)
         data['EMA_fast'] = calculate_ema(data['Close'], period=9)
         data['EMA_slow'] = calculate_ema(data['Close'], period=21)
         
         latest_row = data.iloc[-1]
-        
         rsi_value = latest_row['RSI']
         ema_fast = latest_row['EMA_fast']
         ema_slow = latest_row['EMA_slow']
@@ -76,17 +92,16 @@ def generate_signal(ticker_symbol):
         ema_slow = float(ema_slow)
         current_price = float(current_price)
 
-       # কারেন্সি পেয়ার JPY (যেমন: USDJPY) নাকি সাধারণ (যেমন: EURUSD) তা চেক করা
         is_jpy = "JPY" in ticker_symbol
         
-        # ১. রিস্ক বা স্টপ লস (SL) নির্ধারণ: সাধারণ পেয়ারে ৩০ পিপস, JPY পেয়ারে ৩০ পিপস
+        # রিস্ক বা স্টপ লস (SL) নির্ধারণ: সাধারণ পেয়ারে ৩০ পিপস, JPY পেয়ারে ৩০ পিপস
         pips_sl = 0.0300 if is_jpy else 0.0030   
         
-        # ২. টেক প্রফিট ১ (TP1) -> রেশিও ১:২ (SL-এর দ্বিগুণ লাভ)
-        pips_tp1 = (pips_sl * 2)  # সাধারণ পেয়ারে ৬০ পিপস লাভ
+        # টেক প্রফিট ১ (TP1) -> রেশিও ১:২ (SL-এর দ্বিগুণ লাভ)
+        pips_tp1 = (pips_sl * 2)  
         
-        # ৩. টেক প্রফিট ২ (TP2) -> রেশিও ১:৩ (SL-এর তিনগুণ লাভ)
-        pips_tp2 = (pips_sl * 3)  # সাধারণ পেয়ারে ৯০ পিপস লাভ 
+        # টেক প্রফিট ২ (TP2) -> রেশিও ১:৩ (SL-এর তিনগুণ লাভ)
+        pips_tp2 = (pips_sl * 3)  
 
         if ema_fast > ema_slow and rsi_value > 50:
             direction, strength = "UP", int(min(rsi_value + 25, 98))
@@ -125,7 +140,11 @@ pairs_to_track = {
     "AUDUSD=X": "AUD-USD"
 }
 
-print("Kanak Independent Bot is starting on Render Server...")
+# ডামি সার্ভারকে ব্যাকগ্রাউন্ড থ্রেডে চালু করা
+server_thread = threading.Thread(target=run_dummy_server, daemon=True)
+server_thread.start()
+
+print("Kanak Universal Bot with 1:2/1:3 Profit Ratio is starting...")
 
 while True:
     try:
