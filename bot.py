@@ -9,6 +9,7 @@ FOREX_CHAT_ID = "-1004292142406"
 QUOTEX_CHAT_ID = "-1003684590469"
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
 
+
 # বাংলাদেশ সময় অনুযায়ী ফরেক্স সেশনের নাম বের করার ফাংশন
 def get_current_forex_sessions():
     now_utc = datetime.utcnow()
@@ -30,7 +31,6 @@ def get_ai_bengali_tip(pair_name, direction, rsi, price):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         headers = {'Content-Type': 'application/json'}
         
-        # প্রম্পট আরও নিখুঁত করা হয়েছে যেন এআই প্রতিবার সম্পূর্ণ ভিন্ন ও ইউনিক টিপস দেয়
         prompt = (
             f"You are an expert Forex market analyst. "
             f"Generate a single, unique, and professional one-line trading advice or market structure tip in Bengali for {pair_name}. "
@@ -45,7 +45,6 @@ def get_ai_bengali_tip(pair_name, direction, rsi, price):
         if response.status_code == 200:
             ai_response = response.json()
             tip_text = ai_response['candidates'][0]['content']['parts'][0]['text'].strip()
-            # এআই যদি কোনো কারণে ইংরেজি বা অতিরিক্ত চিহ্ন দেয় তা ফিল্টার করা
             tip_text = tip_text.replace('"', '').replace('*', '')
             return tip_text
         else:
@@ -138,7 +137,6 @@ def generate_signal(ticker_symbol, display_name):
             tp1 = current_price + pips_tp1
             tp2 = current_price + pips_tp2
             
-        # 🤖 প্রতিটি পেয়ারের জন্য আলাদা আলাদা এআই টিপস কল করা হচ্ছে
         bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_value, current_price)
             
         return {
@@ -162,7 +160,7 @@ pairs_to_track = {
     "AUDUSD=X": "AUD-USD"
 }
 
-print("Kanak AI Bot Starting smoothly...")
+print("Kanak AI Bot Starting smoothly with Quotex Entry Prices...")
 
 while True:
     try:
@@ -196,9 +194,11 @@ while True:
                     f"━━━━━━━━━━━━━━━━━━\n\n"
                 )
                 
+                # 📱 কোটেক্সের জন্য Entry Price ইনক্লুড করা হয়েছে
                 quotex_message += (
                     f"📊 **Quotex | {display_name}**\n\n"
                     f"🎯 Signal Direction: {emoji} **{signal['direction']}**\n"
+                    f"💰 Entry Price: **{signal['price']}**\n"
                     f"⏰ Best Expiry: **1 MINUTE**\n"
                     f"📈 Signal Accuracy: {signal['strength']}%\n"
                     f"🚀 Trade Type: Turbo Scalping\n\n"
@@ -219,7 +219,7 @@ while True:
             
             try:
                 requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "Markdown"}, timeout=15)
-                print("Unique AI signals pushed!")
+                print("Unique AI signals with Quotex entry pushed!")
             except Exception as e: print(e)
             
     except Exception as main_loop_error:
