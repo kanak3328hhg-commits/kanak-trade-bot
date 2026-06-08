@@ -1,31 +1,34 @@
-import os
-import subprocess
-import sys
-
-# সার্ভার রান হওয়ার সময় ব্যাকগ্রাউন্ডে টেকনিক্যাল লাইব্রেরিগুলো অটো-ইনস্টল করার ট্রিক
-def install_packages():
-    try:
-        import pandas
-        import pandas_ta
-    except ImportError:
-        print("Installing required analytical packages in background...")
-        # পাইথনের লেটেস্ট ভার্সনে যেন কম্পাইল এরর না আসে তার জন্য বিশেষ কমান্ড
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "numpy==1.26.4", "pandas==2.2.3", "--no-build-isolation"])
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pandas-ta"])
-
-# মেইন বটের কাজ শুরু হওয়ার আগেই ইনস্টলেশন রান করা
-install_packages()
-
 import requests
 import time
 import pandas as pd
-import pandas_ta as ta
 from datetime import datetime
 
 # আপনার দেওয়া সঠিক টোকেন এবং চ্যানেল আইডি
 BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
 FOREX_CHAT_ID = "@kanak_trade_bd"  
 QUOTEX_CHAT_ID = "@Kanak_quotex_bd"
+
+# কোনো লাইব্রেরি ছাড়া খাঁটি পাইথন দিয়ে RSI হিসাব করার ফাংশন
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).copy()
+    loss = (-delta.where(delta < 0, 0)).copy()
+    
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+    
+    # প্রথম রোলিং এর পরের ভ্যালুগুলোর জন্য স্মুদিং
+    for i in range(period, len(series)):
+        avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gain.iloc[i]) / period
+        avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + loss.iloc[i]) / period
+        
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+# কোনো লাইব্রেরি ছাড়া EMA হিসাব করার ফাংশন
+def calculate_ema(series, period):
+    return series.ewm(span=period, adjust=False).mean()
 
 def generate_signal(ticker_symbol):
     try:
@@ -50,21 +53,28 @@ def generate_signal(ticker_symbol):
         }, index=pd.to_datetime(timestamps, unit='s'))
         
         data.dropna(subset=['Close'], inplace=True)
-        if data.empty or len(data) < 21: 
+        if data.empty or len(data) < 30: 
             return None
 
-        data['RSI'] = ta.rsi(data['Close'], length=14)
-        data['EMA_fast'] = ta.ema(data['Close'], length=9)
-        data['EMA_slow'] = ta.ema(data['Close'], length=21)
+        # আমাদের কাস্টম গাণিতিক ফাংশন দিয়ে ইন্ডিকেটর তৈরি
+        data['RSI'] = calculate_rsi(data['Close'], period=14)
+        data['EMA_fast'] = calculate_ema(data['Close'], period=9)
+        data['EMA_slow'] = calculate_ema(data['Close'], period=21)
         
         latest_row = data.iloc[-1]
         
-        rsi_value = float(latest_row['RSI'])
-        ema_fast = float(latest_row['EMA_fast'])
-        ema_slow = float(latest_row['EMA_slow'])
-        current_price = float(latest_row['Close'])
+        rsi_value = latest_row['RSI']
+        ema_fast = latest_row['EMA_fast']
+        ema_slow = latest_row['EMA_slow']
+        current_price = latest_row['Close']
         
-        if pd.isna(rsi_value): rsi_value = 50.0
+        if pd.isna(rsi_value) or pd.isna(ema_fast) or pd.isna(ema_slow):
+            return None
+
+        rsi_value = float(rsi_value)
+        ema_fast = float(ema_fast)
+        ema_slow = float(ema_slow)
+        current_price = float(current_price)
 
         is_jpy = "JPY" in ticker_symbol
         pips_sl = 0.0300 if is_jpy else 0.0030   
@@ -108,7 +118,7 @@ pairs_to_track = {
     "AUDUSD=X": "AUD-USD"
 }
 
-print("Kanak Trade Bot is starting on Render Web Service...")
+print("Kanak Independent Bot is starting on Render Server...")
 
 while True:
     try:
@@ -125,7 +135,6 @@ while True:
                 has_signals = True
                 emoji = "🟢" if signal['direction'] == "UP" else "🔴"
                 
-                # ফরেক্স মেসেজ ফরম্যাট
                 forex_message += (
                     f"🎯 **{display_name}** - {emoji} {signal['direction']}\n\n"
                     f"⏰ Timeframe: 5M\n"
@@ -138,7 +147,6 @@ while True:
                     f"━━━━━━━━━━━━━━━━━━\n\n"
                 )
                 
-                # কোটেক্স ৩০ সেকেন্ড/১ মিনিটের মেসেজ ফরম্যাট
                 quotex_message += (
                     f"📊 **Quotex | {display_name}**\n\n"
                     f"🎯 Signal Direction: {emoji} **{signal['direction']}**\n"
@@ -166,7 +174,7 @@ while True:
             except Exception as telegram_err:
                 print(f"Telegram Quotex Send Error: {telegram_err}")
         else:
-            print("No active signals generated.")
+            print("No active signals generated yet.")
             
     except Exception as main_loop_error:
         print(f"Network issue detected: {main_loop_error}. Retrying in 5 minutes...")
