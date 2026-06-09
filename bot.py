@@ -161,7 +161,7 @@ def generate_signal(ticker_symbol, display_name):
         if pd.isna(rsi_val) or pd.isna(atr_val) or pd.isna(adx_val): return None
 
         # 🚨 ফিল্টার ১: ADX ২৫-এর নিচে হলে মার্কেট সাইডওয়েজ (কোনো সিগন্যাল দেওয়া যাবে না)
-        if adx_val < 25: 
+        if adx_val < 15: 
             return None 
 
         # ATR-ভিত্তিক অত্যন্ত সেফ ডায়নামিক স্টপ লস ও টেক প্রফিট
@@ -173,7 +173,7 @@ def generate_signal(ticker_symbol, display_name):
         direction = None
         
         # 🟢 UP Signal শর্ত: EMA ক্রসওভার + RSI শক্তিশালী + ADX ট্রেন্ড + ক্যান্ডেল হাই ব্রেক
-        if ema_f > ema_s and rsi_val > 53 and latest['High'] >= prev['High']:
+        if ema_f > ema_s and rsi_val > 50 and latest['High'] >= prev['High']:
             direction = "UP"
             strength = int(min(rsi_val + 20, 98))
             sl = price - sl_dist
@@ -182,7 +182,7 @@ def generate_signal(ticker_symbol, display_name):
             quotex_exit = price + quotex_pips
             
         # 🔴 DOWN Signal শর্ত: EMA ক্রসওভার + RSI দুর্বল + ADX ট্রেন্ড + ক্যান্ডেল লো ব্রেক
-        elif ema_f < ema_s and rsi_val < 47 and latest['Low'] <= prev['Low']:
+        elif ema_f < ema_s and rsi_val < 50 and latest['Low'] <= prev['Low']:
             direction = "DOWN"
             strength = int(min((100 - rsi_val) + 20, 98))
             sl = price + sl_dist
