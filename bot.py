@@ -104,10 +104,10 @@ def calculate_atr(df, period=14):
     ranges = pd.concat([high_low, high_close, low_close], axis=1)
     true_range = ranges.max(axis=1)
     return true_range.rolling(window=period).mean()
-
 def generate_signal(ticker_symbol, display_name):
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=3d&interval=5m"
+        # ৩ দিনের জায়গায় ৫ দিনের ডাটা নেওয়া হলো আরও নিখুঁত ব্যাক-ক্যালকুলেশনের জন্য
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=5d&interval=5m"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200: return None
@@ -122,37 +122,75 @@ def generate_signal(ticker_symbol, display_name):
             'Close': result['indicators']['quote'][0]['close']
         }, index=pd.to_datetime(result['timestamp'], unit='s')).dropna()
         
-        if len(data) < 30: return None
+        if len(data) < 50: return None # ADX এর জন্য অন্তত ৫০টি ক্যান্ডেল দরকার
 
+        # ১. মৌলিক ইন্ডিকেটরসমূহ
         data['RSI'] = calculate_rsi(data['Close'], period=14)
         data['EMA_fast'] = calculate_ema(data['Close'], period=9)
         data['EMA_slow'] = calculate_ema(data['Close'], period=21)
-        data['ATR'] = calculate_atr(data, period=14) # 🎯 লাইভ ATR হিসাব
+        data['ATR'] = calculate_atr(data, period=14)
         
+        # ২. 🛡️ ADX (Trend Strength) ক্যালকুলেশন ফিল্টার
+        plus_dm = data['High'].diff()
+        minus_dm = data['Low'].diff()
+        plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0)
+        minus_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0)
+        
+        tr = pd.concat([data['High'] - data['Low'], 
+                        np.abs(data['High'] - data['Close'].shift()), 
+                        np.abs(data['Low'] - data['Close'].shift())], axis=1).max(axis=1)
+                        
+        atr_adx = tr.rolling(window=14).mean()
+        plus_di = 100 * (pd.Series(plus_dm).rolling(window=14).mean() / atr_adx)
+        minus_di = 100 * (pd.Series(minus_dm).rolling(window=14).mean() / atr_adx)
+        dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
+        data['ADX'] = dx.rolling(window=14).mean().values
+
+        # লাইভ ও আগের ক্যান্ডেলের ডাটা (প্রাইস অ্যাকশন কনফার্মেশনের জন্য)
         latest = data.iloc[-1]
-        rsi_val, ema_f, ema_s, price, atr_val = latest['RSI'], latest['EMA_fast'], latest['EMA_slow'], latest['Close'], latest['ATR']
+        prev = data.iloc[-2]
         
-        if pd.isna(rsi_val) or pd.isna(atr_val): return None
+        rsi_val = latest['RSI']
+        ema_f = latest['EMA_fast']
+        ema_s = latest['EMA_slow']
+        price = latest['Close']
+        atr_val = latest['ATR']
+        adx_val = latest['ADX']
+        
+        if pd.isna(rsi_val) or pd.isna(atr_val) or pd.isna(adx_val): return None
 
-        # 🛡️ ATR-ভিত্তিক অত্যন্ত সিউর প্রফিট রেশিও লজিক (১:২ রেশিও)
-        sl_dist = atr_val * 1.2   # স্টপলস একটু সেফ জোনে (১.২ গুণ ATR)
-        tp1_dist = atr_val * 1.5  # ১ম টার্গেট
-        tp2_dist = atr_val * 2.5  # ২য় টার্গেট (হাই প্রফিট রেশিও)
+        # 🚨 ফিল্টার ১: ADX ২৫-এর নিচে হলে মার্কেট সাইডওয়েজ (কোনো সিগন্যাল দেওয়া যাবে না)
+        if adx_val < 25: 
+            return None 
 
-        if ema_f > ema_s and rsi_val > 50:
-            direction, strength = "UP", int(min(rsi_val + 25, 98))
+        # ATR-ভিত্তিক অত্যন্ত সেফ ডায়নামিক স্টপ লস ও টেক প্রফিট
+        sl_dist = atr_val * 1.5   # স্টপলস একটু বাড়িয়ে ১.৫ গুণ করা হলো যেন ফেক স্পাইকে হিট না করে
+        tp1_dist = atr_val * 1.5  # Risk to Reward 1:1.5 এবং 1:3 করা হলো
+        tp2_dist = atr_val * 3.0  
+        quotex_pips = atr_val * 0.4
+
+        direction = None
+        
+        # 🟢 UP Signal শর্ত: EMA ক্রসওভার + RSI শক্তিশালী + ADX ট্রেন্ড + ক্যান্ডেল হাই ব্রেক
+        if ema_f > ema_s and rsi_val > 53 and latest['High'] >= prev['High']:
+            direction = "UP"
+            strength = int(min(rsi_val + 20, 98))
             sl = price - sl_dist
             tp1 = price + tp1_dist
             tp2 = price + tp2_dist
-            quotex_exit = price + (atr_val * 0.5) # কোটেক্স ১-মিনিট টার্গেট
-        elif ema_f < ema_s and rsi_val < 50:
-            direction, strength = "DOWN", int(min((100 - rsi_val) + 25, 98))
+            quotex_exit = price + quotex_pips
+            
+        # 🔴 DOWN Signal শর্ত: EMA ক্রসওভার + RSI দুর্বল + ADX ট্রেন্ড + ক্যান্ডেল লো ব্রেক
+        elif ema_f < ema_s and rsi_val < 47 and latest['Low'] <= prev['Low']:
+            direction = "DOWN"
+            strength = int(min((100 - rsi_val) + 20, 98))
             sl = price + sl_dist
             tp1 = price - tp1_dist
             tp2 = price - tp2_dist
-            quotex_exit = price - (atr_val * 0.5)
-        else:
-            return None # মার্কেট সাইডওয়েজ থাকলে ভুল সিগন্যাল ফিল্টার আউট (হাই সিউরিটি)
+            quotex_exit = price - quotex_pips
+            
+        if not direction: 
+            return None # কোনো শর্ত মিস হলে সিগন্যাল ক্যানসেল
             
         bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_val, price)
         is_jpy = "JPY" in ticker_symbol
