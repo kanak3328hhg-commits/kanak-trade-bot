@@ -12,6 +12,7 @@ FOREX_CHAT_ID = "-1004292142406"  # 🎯 স্ক্রিনশট অনু�
 QUOTEX_CHAT_ID = "-1003684590469" # 🎯 স্ক্রিনশট অনুযায়ী কোটেক্স চ্যানেলের সঠিক আইডি
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
 
+
 # Render-এর পোর্ট ফিক্স করার জন্য ফেক ওয়েব সার্ভার সেটআপ
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -205,4 +206,130 @@ def generate_signal(ticker_symbol, display_name):
             "sl": round(sl, 4 if not is_jpy else 2),
             "tp1": round(tp1, 4 if not is_jpy else 2),
             "tp2": round(tp2, 4 if not is_jpy else 2),
-            "quotex_exit": round(quotex_exit, 4 if not is_jpy else
+            "quotex_exit": round(quotex_exit, 4 if not is_jpy else 2),
+            "tip": bengali_tip
+        }
+    except Exception as e:
+        print(f"Error generating signal for {display_name}: {e}")
+        return None
+
+# আপনার অল অল কারেন্সি পেয়ার লিস্ট (মোট ২৮টি)
+pairs_to_track = {
+    # 1. Major Pairs
+    "EURUSD=X": "EUR-USD",
+    "GBPUSD=X": "GBP-USD",
+    "USDJPY=X": "USD-JPY",
+    "USDCHF=X": "USD-CHF",
+    "AUDUSD=X": "AUD-USD",
+    "USDCAD=X": "USD-CAD",
+    "NZDUSD=X": "NZD-USD",
+    # 2. EUR Crosses
+    "EURGBP=X": "EUR-GBP",
+    "EURJPY=X": "EUR-JPY",
+    "EURCHF=X": "EUR-CHF",
+    "EURCAD=X": "EUR-CAD",
+    "EURAUD=X": "EUR-AUD",
+    "EURNZD=X": "EUR-NZD",
+    # 3. GBP Crosses
+    "GBPJPY=X": "GBP-JPY",
+    "GBPCHF=X": "GBP-CHF",
+    "GBPCAD=X": "GBP-CAD",
+    "GBPAUD=X": "GBP-AUD",
+    "GBPNZD=X": "GBP-NZD",
+    # 4. AUD Crosses
+    "AUDJPY=X": "AUD-JPY",
+    "AUDCHF=X": "AUD-CHF",
+    "AUDCAD=X": "AUD-CAD",
+    "AUDNZD=X": "AUD-NZD",
+    # 5. NZD Crosses
+    "NZDJPY=X": "NZD-JPY",
+    "NZDCHF=X": "NZD-CHF",
+    # 6. CAD Crosses
+    "CADJPY=X": "CAD-JPY",
+    "CADCHF=X": "CAD-CHF",
+    # 7. Commodities
+    "XAUUSD=X": "XAU-USD",  
+    "XAGUSD=X": "XAG-USD"   
+}
+
+# ব্যাকগ্রাউন্ড ওয়েব সার্ভার স্টার্ট
+server_thread = threading.Thread(target=run_fake_server, daemon=True)
+server_thread.start()
+
+print("Kanak AI Bot Starting smoothly with Instant Push HTML Loop...")
+
+# ⏱️ মেইন রিয়েল-টাইম লুপ (পুরোপুরি ফিক্সড ও রেট-লিমিট প্রটেক্টেড)
+while True:
+    try:
+        current_session = get_current_forex_sessions()
+        now_bst = datetime.utcnow() + timedelta(hours=6)
+        current_time = now_bst.strftime("%I:%M %p")
+        
+        print(f"--- Scanning started at {current_time} ---")
+        
+        for ticker, display_name in pairs_to_track.items():
+            # 🚨 প্রতি পেয়ার চেক করার আগে ১.৫ সেকেন্ডের বাধ্যতামূলক বিরতি (Anti-Block)
+            time.sleep(1.5) 
+            
+            signal = generate_signal(ticker, display_name)
+            
+            # যখনই কোনো পেয়ারে শিওর শট সিগন্যাল মিলবে, সাথে সাথে পাঠানো হবে
+            if signal:
+                emoji = "🟢" if signal['direction'] == "UP" else "🔴"
+                
+                # HTML মোডে সাজানো নিখুঁত মেসেজ
+                forex_message = (
+                    f"📊 <b>Forex Signal Update - {current_time}</b>\n\n"
+                    f"🎯 <b>{display_name}</b> - {emoji} {signal['direction']}\n\n"
+                    f"⏰ Timeframe: 5M\n"
+                    f"📊 Strength: {signal['strength']}%\n"
+                    f"💰 Entry Price: {signal['price']}\n"
+                    f"🛑 Stop Loss (SL): {signal['sl']}\n"
+                    f"✅ Take Profit 1 (TP1): {signal['tp1']}\n"
+                    f"✅ Take Profit 2 (TP2): {signal['tp2']}\n\n"
+                    f"💡 <b>AI টিপস:</b> {signal['tip']}\n\n"
+                    f"#{display_name.replace('-', '_')} #Forex\n"
+                    f"🌐 <b>Active Session:</b> <code>{current_session}</code>"
+                )
+                
+                quotex_message = (
+                    f"📱 <b>Quotex Fast Binary Signals - {current_time}</b>\n\n"
+                    f"📊 <b>Quotex | {display_name}</b>\n\n"
+                    f"🎯 Signal Direction: {emoji} <b>{signal['direction']}</b>\n"
+                    f"💰 Entry Price: <b>{signal['price']}</b>\n"
+                    f"🏁 Exit Target Price: <b>{signal['quotex_exit']}</b>\n"
+                    f"⏰ Best Expiry: <b>1 MINUTE</b>\n"
+                    f"📈 Signal Accuracy: {signal['strength']}%\n"
+                    f"🚀 Trade Type: Turbo Scalping\n\n"
+                    f"💡 <b>AI টিপস:</b> {signal['tip']}\n\n"
+                    f"#{display_name.replace('-', '_')} #Quotex1M\n"
+                    f"🌐 <b>Active Session:</b> <code>{current_session}</code>"
+                )
+                
+                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                
+                # ফরেক্স চ্যানেলে ইনস্ট্যান্ট পুশ
+                try: 
+                    res_fx = requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "HTML"}, timeout=12)
+                    if res_fx.status_code != 200:
+                        print(f"Telegram FX Error: {res_fx.text}")
+                except Exception as e: 
+                    print(f"FX Network Error: {e}")
+                    
+                # কোটেক্স চ্যানেলে ইনস্ট্যান্ট পুশ
+                try: 
+                    res_qx = requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "HTML"}, timeout=12)
+                    if res_qx.status_code != 200:
+                        print(f"Telegram Quotex Error: {res_qx.text}")
+                    else:
+                        print(f"🎯 Shureshot Signal pushed for {display_name} at {current_time}")
+                except Exception as e: 
+                    print(f"Quotex Network Error: {e}")
+                
+        print(f"--- Scanning finished. Waiting 3 minutes... ---")
+                
+    except Exception as e:
+        print(f"Main Loop error: {e}")
+    
+    # পুরো লুপ শেষে ৩ মিনিট বিরতি
+    time.sleep(180)
