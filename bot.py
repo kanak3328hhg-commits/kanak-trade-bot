@@ -13,13 +13,13 @@ QUOTEX_CHAT_ID = "-1003684590469" # 🎯 স্ক্রিনশট অনু�
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
 
 
-# Render-এর পোর্ট ফিক্স করার জন্য ফেক ওয়েব সার্ভার সেটআপ
+# Render Port Binding-এর জন্য ফেক সার্ভার
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Kanak AI Bot is running smoothly with HTML & Anti-Block Loop!")
+        self.wfile.write(b"Kanak AI Bot is scanning charts successfully on 5-Minute Intervals!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -28,99 +28,65 @@ def run_fake_server():
     import os
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), DummyServer)
-    print(f"Fake server started on port {port}")
     server.serve_forever()
 
-# বাংলাদেশ সময় অনুযায়ী ফরেক্স সেশনের নাম বের করার ফাংশন
 def get_current_forex_sessions():
     now_utc = datetime.utcnow()
     now_bst = now_utc + timedelta(hours=6)
     current_hour = now_bst.hour
-    
     sessions = []
     if 4 <= current_hour < 13: sessions.append("Sydney")
     if 6 <= current_hour < 15: sessions.append("Tokyo")
     if 13 <= current_hour < 22: sessions.append("London")
     if current_hour >= 18 or current_hour < 3: sessions.append("New York")
-        
-    if not sessions: return "Live Market"
-    return ", ".join(sessions)
+    return ", ".join(sessions) if sessions else "Live Market"
 
-# জেমিনি এআই বাংলা টিপস জেনারেট করার ফাংশন
 def get_ai_bengali_tip(pair_name, direction, rsi, price):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         headers = {'Content-Type': 'application/json'}
-        
         prompt = (
-            f"Write a short technical commentary in Bengali about {pair_name} market structure. "
-            f"The trend is {direction}, current price is {price}, and RSI indicator is at {rsi:.1f}. "
-            f"Explain what this structure means for a scalper in exactly one short sentence (maximum 12 words). "
-            f"Make it unique, analytical, and write directly in Bengali without any intro, quotes, or greetings."
+            f"Write a short technical commentary in Bengali about {pair_name}. "
+            f"Trend is {direction}, RSI is {rsi:.1f}. Explain what this means for a scalper in 1 short sentence."
         )
-        
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         response = requests.post(url, json=payload, headers=headers, timeout=8)
-        
         if response.status_code == 200:
-            ai_response = response.json()
-            tip_text = ai_response['candidates'][0]['content']['parts'][0]['text'].strip()
-            # HTML ট্যাগ ক্লিনিং (যাতে টেলিগ্রাম মেসেজ রিজেক্ট না করে)
-            tip_text = tip_text.replace('"', '').replace('*', '').replace('<', '').replace('>', '')
-            return tip_text
-        else:
-            if "EUR" in pair_name: return "ইউরোর বর্তমান চার্ট প্যাটার্ন অনুযায়ী ব্রেকআউটের জন্য অপেক্ষা করা বুদ্ধিমানের কাজ হবে।"
-            if "GBP" in pair_name: return "পাউন্ডের হাই ভোলাটিলিটি জোনে প্রোপার মানি ম্যানেজমেন্ট কঠোরভাবে মেনে চলুন।"
-            if "JPY" in pair_name: return "জেপিওয়াই পেয়ারে ট্রেন্ড রিভার্সাল কনফার্মেশনের পর এন্ট্রি নেওয়া নিরাপদ।"
-            return f"{pair_name} পেয়ারের বর্তমান টেকনিক্যাল লেভেলে ক্যান্ডেলস্টিক প্যাটার্ন ফলো করুন।"
+            tip_text = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+            return tip_text.replace('"', '').replace('*', '').replace('<', '').replace('>', '')
     except:
-        return f"{pair_name} পেয়ারে ট্রেড করার সময় প্রোপার রিস্ক ম্যানেজমেন্ট ফলো করুন।"
+        pass
+    return f"{pair_name} পেয়ারের বর্তমান টেকনিক্যাল লেভেলে ক্যান্ডেলস্টিক প্যাটার্ন ফলো করুন।"
 
-# RSI হিসাব করার ফাংশন
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).copy()
     loss = (-delta.where(delta < 0, 0)).copy()
-    
     avg_gain = gain.rolling(window=period).mean()
     avg_loss = loss.rolling(window=period).mean()
-    
     for i in range(period, len(series)):
         avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gain.iloc[i]) / period
         avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + loss.iloc[i]) / period
-        
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + (avg_gain / avg_loss)))
 
-# EMA হিসাব করার ফাংশন
 def calculate_ema(series, period):
     return series.ewm(span=period, adjust=False).mean()
 
-# ATR (Volatility Calculator) ফাংশন
 def calculate_atr(df, period=14):
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
-    ranges = pd.concat([high_low, high_close, low_close], axis=1)
-    true_range = ranges.max(axis=1)
-    return true_range.rolling(window=period).mean() 
+    return pd.concat([high_low, high_close, low_close], axis=1).max(axis=1).rolling(window=period).mean()
 
-# 🎯 মেইন সিগন্যাল জেনারেটর (ইনডেক্সিং এবং রেট লিমিট হ্যান্ডেলার সহ)
+# 🎯 স্ট্র্যাটেজি ও ক্যান্ডেল ডাটা অ্যানালাইসিস ফাংশন
 def generate_signal(ticker_symbol, display_name):
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=7d&interval=5m"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-        }
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=5d&interval=5m"
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200: 
-            print(f"Yahoo Fetch Error for {display_name}: Status {response.status_code}")
-            return None
+        if response.status_code != 200: return "NO_SIGNAL"
             
-        json_data = response.json()
-        result = json_data['chart']['result'][0]
-        
+        result = response.json()['chart']['result'][0]
         data = pd.DataFrame({
             'Open': result['indicators']['quote'][0]['open'],
             'High': result['indicators']['quote'][0]['high'],
@@ -128,208 +94,138 @@ def generate_signal(ticker_symbol, display_name):
             'Close': result['indicators']['quote'][0]['close']
         }, index=pd.to_datetime(result['timestamp'], unit='s')).dropna()
         
-        if len(data) < 50: return None 
+        if len(data) < 50: return "NO_SIGNAL"
 
-        # ১. টেকনিক্যাল ইন্ডিকেটরসমূহ
-        data['RSI'] = calculate_rsi(data['Close'], period=14)
-        data['EMA_fast'] = calculate_ema(data['Close'], period=9)
-        data['EMA_slow'] = calculate_ema(data['Close'], period=21)
-        data['ATR'] = calculate_atr(data, period=14)
+        data['RSI'] = calculate_rsi(data['Close'])
+        data['EMA_fast'] = calculate_ema(data['Close'], 9)
+        data['EMA_slow'] = calculate_ema(data['Close'], 21)
+        data['ATR'] = calculate_atr(data)
         
-        # ২. 🛡️ ADX ক্যালকুলেশন (টাইমিং ইনডেক্স ফিক্সড)
+        # ADX ক্যালকুলেশন
         plus_dm = data['High'].diff()
         minus_dm = data['Low'].diff()
-        
         plus_dm_series = pd.Series(np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0), index=data.index)
         minus_dm_series = pd.Series(np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0), index=data.index)
-        
-        tr = pd.concat([data['High'] - data['Low'], 
-                        np.abs(data['High'] - data['Close'].shift()), 
-                        np.abs(data['Low'] - data['Close'].shift())], axis=1).max(axis=1)
-                        
+        tr = pd.concat([data['High'] - data['Low'], np.abs(data['High'] - data['Close'].shift()), np.abs(data['Low'] - data['Close'].shift())], axis=1).max(axis=1)
         atr_adx = tr.rolling(window=14).mean()
-        
         plus_di = 100 * (plus_dm_series.rolling(window=14).mean() / atr_adx)
         minus_di = 100 * (minus_dm_series.rolling(window=14).mean() / atr_adx)
-        dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
-        data['ADX'] = dx.rolling(window=14).mean()
+        data['ADX'] = (100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)).rolling(window=14).mean()
 
-        latest = data.iloc[-1]
-        prev = data.iloc[-2]
+        latest, prev = data.iloc[-1], data.iloc[-2]
+        rsi_val, ema_f, ema_s, price, atr_val, adx_val = latest['RSI'], latest['EMA_fast'], latest['EMA_slow'], latest['Close'], latest['ATR'], latest['ADX']
         
-        rsi_val = latest['RSI']
-        ema_f = latest['EMA_fast']
-        ema_s = latest['EMA_slow']
-        price = latest['Close']
-        atr_val = latest['ATR']
-        adx_val = latest['ADX']
-        
-        if pd.isna(rsi_val) or pd.isna(atr_val) or pd.isna(adx_val): return None
+        if pd.isna(rsi_val) or pd.isna(atr_val) or pd.isna(adx_val): return "NO_SIGNAL"
 
-        # 🚨 ADX ফিল্টার: ২৫ এর নিচে মার্কেট সাইডওয়েজ থাকলে কোনো সিগন্যাল জেনারেট হবে না
-        if adx_val < 25: 
-            return None 
-
-        sl_dist = atr_val * 1.5   
-        tp1_dist = atr_val * 1.5  
-        tp2_dist = atr_val * 3.0  
-        quotex_pips = atr_val * 0.4
+        # ট্রেন্ড স্ট্রেংথ ফিল্টার
+        if adx_val < 25: return "NO_SIGNAL" 
 
         direction = None
-        
         # 🟢 UP সিগন্যাল শর্ত
         if ema_f > ema_s and rsi_val > 53 and latest['High'] >= prev['High']:
             direction = "UP"
+            sl, tp1, tp2 = price - (atr_val * 1.5), price + (atr_val * 1.5), price + (atr_val * 3.0)
+            quotex_exit = price + (atr_val * 0.4)
             strength = int(min(rsi_val + 20, 98))
-            sl = price - sl_dist
-            tp1 = price + tp1_dist
-            tp2 = price + tp2_dist
-            quotex_exit = price + quotex_pips
-            
         # 🔴 DOWN সিগন্যাল শর্ত
         elif ema_f < ema_s and rsi_val < 47 and latest['Low'] <= prev['Low']:
             direction = "DOWN"
+            sl, tp1, tp2 = price + (atr_val * 1.5), price - (atr_val * 1.5), price - (atr_val * 3.0)
+            quotex_exit = price - (atr_val * 0.4)
             strength = int(min((100 - rsi_val) + 20, 98))
-            sl = price + sl_dist
-            tp1 = price - tp1_dist
-            tp2 = price - tp2_dist
-            quotex_exit = price - quotex_pips
             
-        if not direction: return None
+        if not direction: return "NO_SIGNAL"
             
-        bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_val, price)
         is_jpy = "JPY" in ticker_symbol
-            
         return {
-            "price": round(price, 4 if not is_jpy else 2), 
-            "direction": direction, "strength": strength,
-            "sl": round(sl, 4 if not is_jpy else 2),
-            "tp1": round(tp1, 4 if not is_jpy else 2),
-            "tp2": round(tp2, 4 if not is_jpy else 2),
-            "quotex_exit": round(quotex_exit, 4 if not is_jpy else 2),
-            "tip": bengali_tip
+            "price": round(price, 4 if not is_jpy else 2), "direction": direction, "strength": strength,
+            "sl": round(sl, 4 if not is_jpy else 2), "tp1": round(tp1, 4 if not is_jpy else 2),
+            "tp2": round(tp2, 4 if not is_jpy else 2), "quotex_exit": round(quotex_exit, 4 if not is_jpy else 2),
+            "tip": get_ai_bengali_tip(display_name, direction, rsi_val, price)
         }
-    except Exception as e:
-        print(f"Error generating signal for {display_name}: {e}")
-        return None
+    except:
+        return "NO_SIGNAL"
 
-# আপনার অল অল কারেন্সি পেয়ার লিস্ট (মোট ২৮টি)
+# আপনার ট্র্যাকিং পেয়ার লিস্ট (মোট ২০টি গুরুত্বপূর্ণ পেয়ার স্ক্র্যাপ করার স্পিড বাড়ানোর জন্য অপ্টিমাইজড)
 pairs_to_track = {
-    # 1. Major Pairs
-    "EURUSD=X": "EUR-USD",
-    "GBPUSD=X": "GBP-USD",
-    "USDJPY=X": "USD-JPY",
-    "USDCHF=X": "USD-CHF",
-    "AUDUSD=X": "AUD-USD",
-    "USDCAD=X": "USD-CAD",
-    "NZDUSD=X": "NZD-USD",
-    # 2. EUR Crosses
-    "EURGBP=X": "EUR-GBP",
-    "EURJPY=X": "EUR-JPY",
-    "EURCHF=X": "EUR-CHF",
-    "EURCAD=X": "EUR-CAD",
-    "EURAUD=X": "EUR-AUD",
-    "EURNZD=X": "EUR-NZD",
-    # 3. GBP Crosses
-    "GBPJPY=X": "GBP-JPY",
-    "GBPCHF=X": "GBP-CHF",
-    "GBPCAD=X": "GBP-CAD",
-    "GBPAUD=X": "GBP-AUD",
-    "GBPNZD=X": "GBP-NZD",
-    # 4. AUD Crosses
-    "AUDJPY=X": "AUD-JPY",
-    "AUDCHF=X": "AUD-CHF",
-    "AUDCAD=X": "AUD-CAD",
-    "AUDNZD=X": "AUD-NZD",
-    # 5. NZD Crosses
-    "NZDJPY=X": "NZD-JPY",
-    "NZDCHF=X": "NZD-CHF",
-    # 6. CAD Crosses
-    "CADJPY=X": "CAD-JPY",
-    "CADCHF=X": "CAD-CHF",
-    # 7. Commodities
-    "XAUUSD=X": "XAU-USD",  
-    "XAGUSD=X": "XAG-USD"   
+    "EURUSD=X": "EUR-USD", "GBPUSD=X": "GBP-USD", "USDJPY=X": "USD-JPY", "USDCHF=X": "USD-CHF",
+    "AUDUSD=X": "AUD-USD", "USDCAD=X": "USD-CAD", "NZDUSD=X": "NZD-USD", "EURGBP=X": "EUR-GBP",
+    "EURJPY=X": "EUR-JPY", "EURCHF=X": "EUR-CHF", "EURCAD=X": "EUR-CAD", "EURAUD=X": "EUR-AUD",
+    "GBPJPY=X": "GBP-JPY", "GBPCHF=X": "GBP-CHF", "GBPCAD=X": "GBP-CAD", "GBPAUD=X": "GBP-AUD",
+    "AUDJPY=X": "AUD-JPY", "AUDCAD=X": "AUD-CAD", "XAUUSD=X": "XAU-USD"
 }
 
-# ব্যাকগ্রাউন্ড ওয়েব সার্ভার স্টার্ট
-server_thread = threading.Thread(target=run_fake_server, daemon=True)
-server_thread.start()
+# ফেক ওয়েব সার্ভার ব্যাকগ্রাউন্ডে চালু করা
+threading.Thread(target=run_fake_server, daemon=True).start()
+print("Kanak AI Bot initialized for Mandatory 5-Minute Cycles...")
 
-print("Kanak AI Bot Starting smoothly with Instant Push HTML Loop...")
-
-# ⏱️ মেইন রিয়েল-টাইম লুপ (পুরোপুরি ফিক্সড ও রেট-লিমিট প্রটেক্টেড)
+# ⏱️ মেইন রিয়েল-টাইম ৫ মিনিটের ক্লোজিং লুপ
 while True:
     try:
         current_session = get_current_forex_sessions()
         now_bst = datetime.utcnow() + timedelta(hours=6)
         current_time = now_bst.strftime("%I:%M %p")
         
-        print(f"--- Scanning started at {current_time} ---")
+        print(f"\n🔄 5-MIN CYCLE SCANNING STARTED AT {current_time}")
+        
+        no_signal_pairs = [] 
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         
         for ticker, display_name in pairs_to_track.items():
-            # 🚨 প্রতি পেয়ার চেক করার আগে ১.৫ সেকেন্ডের বাধ্যতামূলক বিরতি (Anti-Block)
-            time.sleep(1.5) 
+            time.sleep(1.2) # আইপি ব্লকিং এড়াতে সেফটি ডিলয়
+            result = generate_signal(ticker, display_name)
             
-            signal = generate_signal(ticker, display_name)
-            
-            # যখনই কোনো পেয়ারে শিওর শট সিগন্যাল মিলবে, সাথে সাথে পাঠানো হবে
-            if signal:
-                emoji = "🟢" if signal['direction'] == "UP" else "🔴"
+            if isinstance(result, dict): # সিগন্যাল পাওয়া গেলে সাথে সাথে পুশ
+                emoji = "🟢" if result['direction'] == "UP" else "🔴"
                 
-                # HTML মোডে সাজানো নিখুঁত মেসেজ
+                # ফরেক্স মেসেজ ফরম্যাট
                 forex_message = (
                     f"📊 <b>Forex Signal Update - {current_time}</b>\n\n"
-                    f"🎯 <b>{display_name}</b> - {emoji} {signal['direction']}\n\n"
-                    f"⏰ Timeframe: 5M\n"
-                    f"📊 Strength: {signal['strength']}%\n"
-                    f"💰 Entry Price: {signal['price']}\n"
-                    f"🛑 Stop Loss (SL): {signal['sl']}\n"
-                    f"✅ Take Profit 1 (TP1): {signal['tp1']}\n"
-                    f"✅ Take Profit 2 (TP2): {signal['tp2']}\n\n"
-                    f"💡 <b>AI টিপস:</b> {signal['tip']}\n\n"
-                    f"#{display_name.replace('-', '_')} #Forex\n"
-                    f"🌐 <b>Active Session:</b> <code>{current_session}</code>"
+                    f"🎯 <b>{display_name}</b> - {emoji} {result['direction']}\n\n"
+                    f"⏰ Timeframe: 5M\n📊 Strength: {result['strength']}%\n💰 Entry Price: {result['price']}\n"
+                    f"🛑 Stop Loss (SL): {result['sl']}\n✅ Take Profit 1 (TP1): {result['tp1']}\n✅ Take Profit 2 (TP2): {result['tp2']}\n\n"
+                    f"💡 <b>AI টিপস:</b> {result['tip']}\n\n#{display_name.replace('-', '_')} #Forex\n🌐 <b>Active Session:</b> <code>{current_session}</code>"
                 )
                 
+                # কোটেক্স মেসেজ ফরম্যাট
                 quotex_message = (
                     f"📱 <b>Quotex Fast Binary Signals - {current_time}</b>\n\n"
                     f"📊 <b>Quotex | {display_name}</b>\n\n"
-                    f"🎯 Signal Direction: {emoji} <b>{signal['direction']}</b>\n"
-                    f"💰 Entry Price: <b>{signal['price']}</b>\n"
-                    f"🏁 Exit Target Price: <b>{signal['quotex_exit']}</b>\n"
+                    f"🎯 Signal Direction: {emoji} <b>{result['direction']}</b>\n"
+                    f"💰 Entry Price: <b>{result['price']}</b>\n"
+                    f"🏁 Exit Target Price: <b>{result['quotex_exit']}</b>\n"
                     f"⏰ Best Expiry: <b>1 MINUTE</b>\n"
-                    f"📈 Signal Accuracy: {signal['strength']}%\n"
+                    f"📈 Signal Accuracy: {result['strength']}%\n"
                     f"🚀 Trade Type: Turbo Scalping\n\n"
-                    f"💡 <b>AI টিপস:</b> {signal['tip']}\n\n"
-                    f"#{display_name.replace('-', '_')} #Quotex1M\n"
-                    f"🌐 <b>Active Session:</b> <code>{current_session}</code>"
+                    f"💡 <b>AI টিপস:</b> {result['tip']}\n\n#{display_name.replace('-', '_')} #Quotex1M\n🌐 <b>Active Session:</b> <code>{current_session}</code>"
                 )
                 
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                
-                # ফরেক্স চ্যানেলে ইনস্ট্যান্ট পুশ
-                try: 
-                    res_fx = requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "HTML"}, timeout=12)
-                    if res_fx.status_code != 200:
-                        print(f"Telegram FX Error: {res_fx.text}")
-                except Exception as e: 
-                    print(f"FX Network Error: {e}")
-                    
-                # কোটেক্স চ্যানেলে ইনস্ট্যান্ট পুশ
-                try: 
-                    res_qx = requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "HTML"}, timeout=12)
-                    if res_qx.status_code != 200:
-                        print(f"Telegram Quotex Error: {res_qx.text}")
-                    else:
-                        print(f"🎯 Shureshot Signal pushed for {display_name} at {current_time}")
-                except Exception as e: 
-                    print(f"Quotex Network Error: {e}")
-                
-        print(f"--- Scanning finished. Waiting 3 minutes... ---")
+                requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "HTML"}, timeout=10)
+                requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "HTML"}, timeout=10)
+                print(f"   🔥 Signal sent for {display_name}")
+            else:
+                # সিগন্যাল না পাওয়া পেয়ারগুলো লিস্টে জমা হবে
+                no_signal_pairs.append(display_name)
+
+        # 📊 ৫ মিনিট শেষ হওয়ার বাধ্যতামূলক মার্কেট আপডেট রিপোর্ট (যা আপনি চেইন টাইমে চেয়েছেন)
+        report_message = f"🔄 <b>Market Scan Update - {current_time}</b>\n"
+        report_message += f"🌐 Active Session: <code>{current_session}</code>\n\n"
+        report_message += f"⚠️ <b>নিচের পেয়ারগুলোতে সিগনাল এখনও তৈরি হয় নাই বা পাওয়া যাচ্ছে না:</b>\n"
+        
+        if no_signal_pairs:
+            report_message += f"<code>{', '.join(no_signal_pairs)}</code>\n\n"
+        else:
+            report_message += "<i>সবগুলো পেয়ারেই সিগন্যাল চলমান!</i>\n\n"
+            
+        report_message += "🤖 <i>বট পরবর্তী ক্যান্ডেল ক্লোজিং ও ৫ মিনিট পর রি-স্ক্যানের জন্য প্রস্তুত হচ্ছে...</i>"
+        
+        # রিপোর্ট মেসেজটি চ্যানেলে পাঠানো হচ্ছে (যাতে প্রতি ৫ মিনিট পর পর চ্যানেলে মেসেজ আসেই)
+        requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
+        requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
+        print("✅ 5-Minute Mandatory Market Report Pushed successfully!")
                 
     except Exception as e:
-        print(f"Main Loop error: {e}")
-    
-    # পুরো লুপ শেষে ৩ মিনিট বিরতি
-    time.sleep(180)
+        print(f"Loop error: {e}")
+        
+    # ঠিক ৫ মিনিট (৩০০ সেকেন্ড) পর পর লুপটি পুনরায় রান হবে
+    time.sleep(300)
