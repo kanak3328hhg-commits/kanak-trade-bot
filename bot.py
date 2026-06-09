@@ -1,5 +1,6 @@
 import requests
 import time
+import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import threading
@@ -95,86 +96,77 @@ def calculate_rsi(series, period=14):
 def calculate_ema(series, period):
     return series.ewm(span=period, adjust=False).mean()
 
+# সিউর প্রফিট রেশিওর জন্য ATR (Volatility Calculator) ফাংশন
+def calculate_atr(df, period=14):
+    high_low = df['High'] - df['Low']
+    high_close = np.abs(df['High'] - df['Close'].shift())
+    low_close = np.abs(df['Low'] - df['Close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    return true_range.rolling(window=period).mean()
+
 def generate_signal(ticker_symbol, display_name):
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=2d&interval=5m"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=3d&interval=5m"
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200: return None
             
         json_data = response.json()
         result = json_data['chart']['result'][0]
         
-        timestamps = result['timestamp']
-        closes = result['indicators']['quote'][0]['close']
-        highs = result['indicators']['quote'][0]['high']
-        lows = result['indicators']['quote'][0]['low']
-        opens = result['indicators']['quote'][0]['open']
-        
         data = pd.DataFrame({
-            'Open': opens, 'High': highs, 'Low': lows, 'Close': closes
-        }, index=pd.to_datetime(timestamps, unit='s'))
+            'Open': result['indicators']['quote'][0]['open'],
+            'High': result['indicators']['quote'][0]['high'],
+            'Low': result['indicators']['quote'][0]['low'],
+            'Close': result['indicators']['quote'][0]['close']
+        }, index=pd.to_datetime(result['timestamp'], unit='s')).dropna()
         
-        data.dropna(subset=['Close'], inplace=True)
-        if data.empty or len(data) < 30: return None
+        if len(data) < 30: return None
 
         data['RSI'] = calculate_rsi(data['Close'], period=14)
         data['EMA_fast'] = calculate_ema(data['Close'], period=9)
         data['EMA_slow'] = calculate_ema(data['Close'], period=21)
+        data['ATR'] = calculate_atr(data, period=14) # 🎯 লাইভ ATR হিসাব
         
-        latest_row = data.iloc[-1]
-        rsi_value = latest_row['RSI']
-        ema_fast = latest_row['EMA_fast']
-        ema_slow = latest_row['EMA_slow']
-        current_price = latest_row['Close']
+        latest = data.iloc[-1]
+        rsi_val, ema_f, ema_s, price, atr_val = latest['RSI'], latest['EMA_fast'], latest['EMA_slow'], latest['Close'], latest['ATR']
         
-        if pd.isna(rsi_value) or pd.isna(ema_fast) or pd.isna(ema_slow): return None
+        if pd.isna(rsi_val) or pd.isna(atr_val): return None
 
-        rsi_value = float(rsi_value)
-        ema_fast = float(ema_fast)
-        ema_slow = float(ema_slow)
-        current_price = float(current_price)
+        # 🛡️ ATR-ভিত্তিক অত্যন্ত সিউর প্রফিট রেশিও লজিক (১:২ রেশিও)
+        sl_dist = atr_val * 1.2   # স্টপলস একটু সেফ জোনে (১.২ গুণ ATR)
+        tp1_dist = atr_val * 1.5  # ১ম টার্গেট
+        tp2_dist = atr_val * 2.5  # ২য় টার্গেট (হাই প্রফিট রেশিও)
 
-        is_jpy = "JPY" in ticker_symbol
-        pips_sl = 0.0300 if is_jpy else 0.0030   
-        pips_tp1 = (pips_sl * 2)  
-        pips_tp2 = (pips_sl * 3)  
-        quotex_pips_target = 0.0100 if is_jpy else 0.0005
-
-        if ema_fast > ema_slow and rsi_value > 50:
-            direction, strength = "UP", int(min(rsi_value + 25, 98))
-            sl = current_price - pips_sl
-            tp1 = current_price + pips_tp1
-            tp2 = current_price + pips_tp2
-            quotex_exit = current_price + quotex_pips_target
-        elif ema_fast < ema_slow and rsi_value < 50:
-            direction, strength = "DOWN", int(min((100 - rsi_value) + 25, 98))
-            sl = current_price + pips_sl
-            tp1 = current_price - pips_tp1
-            tp2 = current_price - pips_tp2
-            quotex_exit = current_price - quotex_pips_target
+        if ema_f > ema_s and rsi_val > 50:
+            direction, strength = "UP", int(min(rsi_val + 25, 98))
+            sl = price - sl_dist
+            tp1 = price + tp1_dist
+            tp2 = price + tp2_dist
+            quotex_exit = price + (atr_val * 0.5) # কোটেক্স ১-মিনিট টার্গেট
+        elif ema_f < ema_s and rsi_val < 50:
+            direction, strength = "DOWN", int(min((100 - rsi_val) + 25, 98))
+            sl = price + sl_dist
+            tp1 = price - tp1_dist
+            tp2 = price - tp2_dist
+            quotex_exit = price - (atr_val * 0.5)
         else:
-            direction = "UP" if rsi_value >= 50 else "DOWN"
-            strength = 72
-            sl = current_price - pips_sl
-            tp1 = current_price + pips_tp1
-            tp2 = current_price + pips_tp2
-            quotex_exit = current_price + quotex_pips_target if direction == "UP" else current_price - quotex_pips_target
+            return None # মার্কেট সাইডওয়েজ থাকলে ভুল সিগন্যাল ফিল্টার আউট (হাই সিউরিটি)
             
-        bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_value, current_price)
+        bengali_tip = get_ai_bengali_tip(display_name, direction, rsi_val, price)
+        is_jpy = "JPY" in ticker_symbol
             
         return {
-            "price": round(current_price, 4 if not is_jpy else 2), 
-            "direction": direction, 
-            "strength": strength,
+            "price": round(price, 4 if not is_jpy else 2), 
+            "direction": direction, "strength": strength,
             "sl": round(sl, 4 if not is_jpy else 2),
             "tp1": round(tp1, 4 if not is_jpy else 2),
             "tp2": round(tp2, 4 if not is_jpy else 2),
             "quotex_exit": round(quotex_exit, 4 if not is_jpy else 2),
             "tip": bengali_tip
         }
-    except Exception as e:
+    except:
         return None
 
 pairs_to_track = {
