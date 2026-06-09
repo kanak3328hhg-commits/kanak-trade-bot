@@ -183,12 +183,11 @@ server_thread.start()
 
 print("Kanak AI Bot Starting smoothly with Real-time Loop...")
 
+
 while True:
     try:
         current_session = get_current_forex_sessions()
-        
-        now_utc = datetime.utcnow()
-        now_bst = now_utc + timedelta(hours=6)
+        now_bst = datetime.utcnow() + timedelta(hours=6)
         current_time = now_bst.strftime("%I:%M %p")
         
         forex_message = f"📊 **Forex Signals Update - {current_time}**\n\n"
@@ -232,20 +231,23 @@ while True:
         if has_signals:
             if forex_message.endswith("━━━━━━━━━━━━━━━━━━\n\n"): forex_message = forex_message[:-22]
             if quotex_message.endswith("━━━━━━━━━━━━━━━━━━\n\n"): quotex_message = quotex_message[:-22]
-                
+            
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             
-            # কোনো শর্ত ছাড়া সরাসরি রিয়েল-টাইমে পুশ হবে
-            try: requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "Markdown"}, timeout=12)
-            except Exception as e: print(e)
-            
-            try:
+            # কোনো শর্ত ছাড়া সরাসরি রিয়েল-টাইমে মেসেজ পুশ হবে
+            try: 
+                requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "Markdown"}, timeout=12)
+            except: 
+                pass
+                
+            try: 
                 requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "Markdown"}, timeout=12)
                 print(f"Signals directly pushed at {current_time}")
-            except Exception as e: print(e)
+            except: 
+                pass
                 
-    except Exception as main_loop_error:
-        print(f"Loop error: {main_loop_error}")
+    except Exception as e:
+        print(f"Loop error: {e}")
     
-    # ⏱️ সেফ জোনে ৩ মিনিট (১৮০ সেকেন্ড) পর পর রেগুলার ফ্রেশ পুশ হবে 
+    # ⏱️ প্রতি ৩ মিনিট পর পর ফ্রেশ লাইভ ডাটা পুশ করবে
     time.sleep(180)
