@@ -9,15 +9,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # আপনার একদম সঠিক ও ভেরিফাইড তথ্যসমূহ
 BOT_TOKEN = "8264008675:AAEHzakAXPZeNVZKWlvYHRWboyjAuUhg0QM"
 FOREX_CHAT_ID = "-1004292142406"  # 🎯 স্ক্রিনশট অনুযায়ী ফরেক্স চ্যানেলের সঠিক আইডি
-QUOTEX_CHAT_ID = "-1003684590469" # 🎯 স্ক্রিনশট অনুযায়ী কোটেক্স চ্যানেলের সঠিক আইডি
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
+
 
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Kanak AI Bot: Professional Humanized Messaging Active!")
+        self.wfile.write(b"Kanak AI Bot: Running Dedicatedly for Forex Channel Only!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -39,7 +39,6 @@ def get_current_forex_sessions():
     if current_hour >= 18 or current_hour < 3: sessions.append("New York 🇺🇸")
     return ", ".join(sessions) if sessions else "Live Market"
 
-# 🧠 জেমিনিকে দেওয়া হলো একদম হিউম্যান ট্রেডারের পারসোনা
 def get_ai_bengali_tip(pair_name, direction, rsi, price):
     for attempt in range(3):
         try:
@@ -61,7 +60,7 @@ def get_ai_bengali_tip(pair_name, direction, rsi, price):
         except:
             time.sleep(1)
     action = "বাই (Buy)" if direction == "UP" else "সেল (Sell)"
-    return f"চার্ট অনুযায়ী {pair_name}-এ এখন ক্লিয়ার {action} প্রেশার দেখ যাচ্ছে, প্রফিট বুক করার ভালো সুযোগ এটি।"
+    return f"চার্ট অনুযায়ী {pair_name}-এ এখন ক্লিয়ার {action} প্রেশার দেখা যাচ্ছে, প্রফিট বুক করার ভালো সুযোগ এটি।"
 
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -134,10 +133,9 @@ def generate_signal(ticker_symbol, display_name):
         
         risk_dist = atr_val * 1.5
         sl = price - risk_dist if direction == "UP" else price + risk_dist
-        quotex_exit = price + (atr_val * 0.4) if direction == "UP" else price - (atr_val * 0.4)
         strength = int(min(rsi_val + 20, 98)) if direction == "UP" else int(min((100 - rsi_val) + 20, 98))
         
-        # 🎯 হিউম্যানাইজড ডাইনামিক টিপি লেআউট
+        # 🎯 ১:২ থেকে শুরু হওয়া হিউম্যানাইজড ডাইনামিক টিপি
         tp_list = []
         tp1_val = price + (risk_dist * 2) if direction == "UP" else price - (risk_dist * 2)
         tp_list.append(f"🎯 <b>Target 1 (1:2 ratio):</b> {round(tp1_val, dec_places)}")
@@ -163,8 +161,7 @@ def generate_signal(ticker_symbol, display_name):
         
         return {
             "price": round(price, dec_places), "direction": direction, "strength": strength,
-            "sl": round(sl, dec_places), "tp_block": tp_text_block, "quotex_exit": round(quotex_exit, dec_places),
-            "tip": ai_tip
+            "sl": round(sl, dec_places), "tp_block": tp_text_block, "tip": ai_tip
         }
     except:
         return "NO_SIGNAL"
@@ -178,8 +175,9 @@ pairs_to_track = {
 }
 
 threading.Thread(target=run_fake_server, daemon=True).start()
-print("Kanak AI Bot: Humanized Live Messaging Engine Started...")
+print("Kanak AI Bot: Running Dedicated Forex Mode (3-Min Cycles)...")
 
+# ⏱️ ৩ মিনিটের কন্টিনিউয়াস ফরেক্স লুপ
 while True:
     try:
         current_session = get_current_forex_sessions()
@@ -196,7 +194,7 @@ while True:
             if isinstance(result, dict): 
                 action_text = "🟢 BUY SETUP" if result['direction'] == "UP" else "🔴 SELL SETUP"
                 
-                # 📊 ফরেক্স মেসেজ ফরম্যাট (পুরোপুরি হিউম্যান স্টাইল)
+                # 📊 নিখুঁত হিউম্যান-স্টাইল ফরেক্স মেসেজ
                 forex_message = (
                     f"⚡ <b>Live Chart Analysis | {current_time}</b>\n\n"
                     f"🔥 <b>{display_name}</b> → <b>{action_text}</b>\n"
@@ -211,27 +209,12 @@ while True:
                     f"#{display_name.replace('-', '_')} #LiveTrade"
                 )
                 
-                # 📱 কোটেক্স মেসেজ ফরম্যাট (দ্রুত স্ক্যালপার স্টাইল)
-                quotex_message = (
-                    f"🚀 <b>Fast Scalp Alert | {current_time}</b>\n\n"
-                    f"💎 <b>Asset:</b> {display_name}\n"
-                    f"👉 <b>Action:</b> <b>{action_text}</b>\n"
-                    f"───────────────────\n"
-                    f"⏱️ <b>Duration:</b> 1 MINUTE (Turbo)\n"
-                    f"📊 <b>Confidence:</b> {result['strength']}%\n\n"
-                    f"💵 <b>Strike Entry:</b> {result['price']}\n"
-                    f"🏁 <b>Expected Exit:</b> {result['quotex_exit']}\n\n"
-                    f"💡 <b>Quick Tip:</b> {result['tip']}\n\n"
-                    f"#{display_name.replace('-', '_')} #Quotex #TurboScalp"
-                )
-                
                 requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "HTML"}, timeout=10)
-                requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "HTML"}, timeout=10)
-                print(f"   🔥 Humanized Signal sent for {display_name}")
+                print(f"   🔥 Signal sent to Forex Channel for {display_name}")
             else:
                 no_signal_pairs.append(display_name)
 
-        # 📊 ৩ মিনিটের হিউম্যানাইজড মার্কেট সামারি আপডেট
+        # 📊 ৩ মিনিটের হিউম্যানাইজড মার্কেট সামারি আপডেট (শুধু ফরেক্স চ্যানেলের জন্য)
         report_message = (
             f"🔄 <b>Quick Market Snapshot | {current_time}</b>\n"
             f"🌐 <b>Active Session:</b> {current_session}\n"
@@ -247,8 +230,7 @@ while True:
         report_message += "\n⏱️ <i>পরবর্তী ৩ মিনিট পর আমি আবার চার্ট চেক করে নতুন আপডেট দিচ্ছি...</i>"
         
         requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
-        requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
-        print("✅ 3-Minute Humanized Summary Pushed!")
+        print("✅ 3-Minute Forex Summary Pushed!")
                 
     except Exception as e:
         print(f"Loop error: {e}")
