@@ -103,11 +103,12 @@ def calculate_atr(df, period=14):
     low_close = np.abs(df['Low'] - df['Close'].shift())
     ranges = pd.concat([high_low, high_close, low_close], axis=1)
     true_range = ranges.max(axis=1)
-    return true_range.rolling(window=period).mean()
+    return true_range.rolling(window=period).mean() 
+    
 def generate_signal(ticker_symbol, display_name):
     try:
-        # ৩ দিনের জায়গায় ৫ দিনের ডাটা নেওয়া হলো আরও নিখুঁত ব্যাক-ক্যালকুলেশনের জন্য
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=5d&interval=5m"
+        # 🎯 উইকেন্ড বা ছুটির দিনের ব্যাকআপের জন্য রেঞ্জ ৭ দিন করা হলো, যেন ৫০টির বেশি ক্যান্ডেল সবসময় থাকে
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=7d&interval=5m"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200: return None
@@ -122,7 +123,7 @@ def generate_signal(ticker_symbol, display_name):
             'Close': result['indicators']['quote'][0]['close']
         }, index=pd.to_datetime(result['timestamp'], unit='s')).dropna()
         
-        if len(data) < 50: return None # ADX এর জন্য অন্তত ৫০টি ক্যান্ডেল দরকার
+        if len(data) < 50: return None # এখন ডাটা পর্যাপ্ত থাকায় এই কন্ডিশন পার হয়ে যাবেে
 
         # ১. মৌলিক ইন্ডিকেটরসমূহ
         data['RSI'] = calculate_rsi(data['Close'], period=14)
