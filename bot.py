@@ -177,18 +177,20 @@ pairs_to_track = {
 threading.Thread(target=run_fake_server, daemon=True).start()
 print("Kanak AI Bot: Running Dedicated Forex Mode (3-Min Cycles)...")
 
-# ⏱️ ৩ মিনিটের কন্টিনিউয়াস ফরেক্স লুপ
+# ⏱️ মেইন রিয়েল-টাইম ৫ মিনিটের কন্টিনিউয়াস ফরেক্স লুপ (আগের পারফেক্ট টাইমিং)
 while True:
     try:
         current_session = get_current_forex_sessions()
         now_bst = datetime.utcnow() + timedelta(hours=6)
         current_time = now_bst.strftime("%I:%M %p")
         
+        print(f"\n🔄 SCANNING STARTED AT {current_time} (Dedicated 5M Interval)")
+        
         no_signal_pairs = [] 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         
         for ticker, display_name in pairs_to_track.items():
-            time.sleep(1.2) 
+            time.sleep(1.2) # এপিআই সেফটি ডিলে
             result = generate_signal(ticker, display_name)
             
             if isinstance(result, dict): 
@@ -214,7 +216,7 @@ while True:
             else:
                 no_signal_pairs.append(display_name)
 
-        # 📊 ৩ মিনিটের হিউম্যানাইজড মার্কেট সামারি আপডেট (শুধু ফরেক্স চ্যানেলের জন্য)
+        # 📊 ৫ মিনিটের হিউম্যানাইজড মার্কেট সামারি আপডেট
         report_message = (
             f"🔄 <b>Quick Market Snapshot | {current_time}</b>\n"
             f"🌐 <b>Active Session:</b> {current_session}\n"
@@ -227,12 +229,13 @@ while True:
         else:
             report_message += "<i>সবগুলো পেয়ারেই অলরেডি লাইভ মুভমেন্ট বা সিগন্যাল রানিং আছে!</i>\n"
             
-        report_message += "\n⏱️ <i>পরবর্তী ৩ মিনিট পর আমি আবার চার্ট চেক করে নতুন আপডেট দিচ্ছি...</i>"
+        report_message += "\n⏱️ <i>পরবর্তী ৫ মিনিট পর আমি আবার চার্ট চেক করে নতুন আপডেট দিচ্ছি...</i>"
         
         requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
-        print("✅ 3-Minute Forex Summary Pushed!")
+        print("✅ 5-Minute Forex Summary Pushed Successfully!")
                 
     except Exception as e:
         print(f"Loop error: {e}")
         
-    time.sleep(180)
+    # ⏱️ ঠিক ৫ মিনিট (৩০০ সেকেন্ড) পর পর মেইন লুপটি পুনরায় রান হবে
+    time.sleep(300)
