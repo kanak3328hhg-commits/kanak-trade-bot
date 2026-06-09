@@ -11,13 +11,17 @@ FOREX_CHAT_ID = "-1004292142406"  # 🎯 স্ক্রিনশট অনু�
 QUOTEX_CHAT_ID = "-1003684590469" # 🎯 স্ক্রিনশট অনুযায়ী কোটেক্স চ্যানেলের সঠিক আইডি
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
 
+
 # Render-এর পোর্ট ফিক্স করার জন্য ফেক ওয়েব সার্ভার সেটআপ
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Kanak AI Bot is running successfully with unique tips!")
+        self.wfile.write(b"Kanak AI Bot is running smoothly!")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
 
 def run_fake_server():
     import os
@@ -41,13 +45,12 @@ def get_current_forex_sessions():
     if not sessions: return "Live Market"
     return ", ".join(sessions)
 
-# জেমিনি ফিল্টার বাইপাস করে ইউনিক ও প্রফেশনাল বাংলা টিপস জেনারেট করার ফাংশন
+# জেমিনি এআই বাংলা টিপস জেনারেট করার ফাংশন
 def get_ai_bengali_tip(pair_name, direction, rsi, price):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         headers = {'Content-Type': 'application/json'}
         
-        # প্রম্পটটি সম্পূর্ণ পরিবর্তন করা হয়েছে যেন এটি এআই সেফটি ফিল্টারে ব্লক না খায়
         prompt = (
             f"Write a short technical commentary in Bengali about {pair_name} market structure. "
             f"The trend is {direction}, current price is {price}, and RSI indicator is at {rsi:.1f}. "
@@ -56,7 +59,7 @@ def get_ai_bengali_tip(pair_name, direction, rsi, price):
         )
         
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        response = requests.post(url, json=payload, headers=headers, timeout=12)
+        response = requests.post(url, json=payload, headers=headers, timeout=8) # টাইমআউট ৮ সেকেন্ড করা হলো দ্রুত রেসপন্সের জন্য
         
         if response.status_code == 200:
             ai_response = response.json()
@@ -64,7 +67,6 @@ def get_ai_bengali_tip(pair_name, direction, rsi, price):
             tip_text = tip_text.replace('"', '').replace('*', '')
             return tip_text
         else:
-            # পেয়ার অনুযায়ী আলাদা আলাদা ব্যাকআপ যেন কোনো কারণে এআই ফেইল করলেও মেসেজ এক না হয়
             if "EUR" in pair_name: return "ইউরোর বর্তমান চার্ট প্যাটার্ন অনুযায়ী ব্রেকআউটের জন্য অপেক্ষা করা বুদ্ধিমানের কাজ হবে।"
             if "GBP" in pair_name: return "পাউন্ডের হাই ভোলাটিলিটি জোনে প্রোপার মানি ম্যানেজমেন্ট কঠোরভাবে মেনে চলুন।"
             if "JPY" in pair_name: return "জেপিওয়াই পেয়ারে ট্রেন্ড রিভার্সাল কনফার্মেশনের পর এন্ট্রি নেওয়া নিরাপদ।"
@@ -96,9 +98,9 @@ def calculate_ema(series, period):
 def generate_signal(ticker_symbol, display_name):
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=2d&interval=5m"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200: return None
             
         json_data = response.json()
@@ -138,8 +140,6 @@ def generate_signal(ticker_symbol, display_name):
         pips_sl = 0.0300 if is_jpy else 0.0030   
         pips_tp1 = (pips_sl * 2)  
         pips_tp2 = (pips_sl * 3)  
-
-        # কোটেক্স ১-মিনিট এক্সিট টার্গেট মুভমেন্ট
         quotex_pips_target = 0.0100 if is_jpy else 0.0005
 
         if ema_fast > ema_slow and rsi_value > 50:
@@ -175,7 +175,6 @@ def generate_signal(ticker_symbol, display_name):
             "tip": bengali_tip
         }
     except Exception as e:
-        print(f"Error analyzing {ticker_symbol}: {e}")
         return None
 
 pairs_to_track = {
@@ -186,11 +185,11 @@ pairs_to_track = {
     "AUDUSD=X": "AUD-USD"
 }
 
-# ব্যাকগ্রাউন্ডে ফেক সার্ভার থ্রেড চালু করা যেন Render পোর্ট ডিটেক্ট করতে পারে
+# ব্যাকগ্রাউন্ড সার্ভার স্টার্ট
 server_thread = threading.Thread(target=run_fake_server, daemon=True)
 server_thread.start()
 
-print("Kanak AI Bot Starting smoothly with Verified Channel IDs...")
+print("Kanak AI Bot Starting smoothly with Real-time Loop...")
 
 while True:
     try:
@@ -244,15 +243,17 @@ while True:
                 
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             
-            try: requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "Markdown"}, timeout=15)
+            # কোনো শর্ত ছাড়া সরাসরি রিয়েল-টাইমে পুশ হবে
+            try: requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": forex_message, "parse_mode": "Markdown"}, timeout=12)
             except Exception as e: print(e)
             
             try:
-                requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "Markdown"}, timeout=15)
-                print("Signals pushed perfectly!")
+                requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "Markdown"}, timeout=12)
+                print(f"Signals directly pushed at {current_time}")
             except Exception as e: print(e)
-            
+                
     except Exception as main_loop_error:
         print(f"Loop error: {main_loop_error}")
     
-    time.sleep(300)
+    # ⏱️ সেফ জোনে ৩ মিনিট (১৮০ সেকেন্ড) পর পর রেগুলার ফ্রেশ পুশ হবে 
+    time.sleep(180)
