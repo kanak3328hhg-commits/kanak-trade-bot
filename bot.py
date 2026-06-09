@@ -212,13 +212,48 @@ def generate_signal(ticker_symbol, display_name):
         return None
 
 pairs_to_track = {
-    "NZDUSD=X": "NZD-USD",
+    # 1. Major Pairs
     "EURUSD=X": "EUR-USD",
     "GBPUSD=X": "GBP-USD",
     "USDJPY=X": "USD-JPY",
-    "AUDUSD=X": "AUD-USD"
-}
+    "USDCHF=X": "USD-CHF",
+    "AUDUSD=X": "AUD-USD",
+    "USDCAD=X": "USD-CAD",
+    "NZDUSD=X": "NZD-USD",
 
+    # 2. EUR Crosses
+    "EURGBP=X": "EUR-GBP",
+    "EURJPY=X": "EUR-JPY",
+    "EURCHF=X": "EUR-CHF",
+    "EURCAD=X": "EUR-CAD",
+    "EURAUD=X": "EUR-AUD",
+    "EURNZD=X": "EUR-NZD",
+
+    # 3. GBP Crosses
+    "GBPJPY=X": "GBP-JPY",
+    "GBPCHF=X": "GBP-CHF",
+    "GBPCAD=X": "GBP-CAD",
+    "GBPAUD=X": "GBP-AUD",
+    "GBPNZD=X": "GBP-NZD",
+
+    # 4. AUD Crosses
+    "AUDJPY=X": "AUD-JPY",
+    "AUDCHF=X": "AUD-CHF",
+    "AUDCAD=X": "AUD-CAD",
+    "AUDNZD=X": "AUD-NZD",
+
+    # 5. NZD Crosses
+    "NZDJPY=X": "NZD-JPY",
+    "NZDCHF=X": "NZD-CHF",
+
+    # 6. CAD Crosses
+    "CADJPY=X": "CAD-JPY",
+    "CADCHF=X": "CAD-CHF",
+
+    # 7. Commodities (Metals) - নতুন যুক্ত করা হয়েছে
+    "XAUUSD=X": "XAU-USD",  # Gold / US Dollar
+    "XAGUSD=X": "XAG-USD"   # Silver / US Dollar
+}
 # ব্যাকগ্রাউন্ড ওয়েব সার্ভার স্টার্ট
 server_thread = threading.Thread(target=run_fake_server, daemon=True)
 server_thread.start()
