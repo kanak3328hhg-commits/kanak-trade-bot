@@ -12,14 +12,12 @@ FOREX_CHAT_ID = "-1004292142406"  # 🎯 স্ক্রিনশট অনু�
 QUOTEX_CHAT_ID = "-1003684590469" # 🎯 স্ক্রিনশট অনুযায়ী কোটেক্স চ্যানেলের সঠিক আইডি
 GEMINI_API_KEY = "AIzaSyB6_x6_7-TuK-yYHEas7yhBshe4mG7ibNI"
 
-
-# Render Port Binding-এর জন্য ফেক সার্ভার
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Kanak AI Bot is scanning charts successfully on 5-Minute Intervals!")
+        self.wfile.write(b"Kanak AI Bot is running: 5M Analysis with 3-Min Telegram Updates!")
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
@@ -78,9 +76,10 @@ def calculate_atr(df, period=14):
     low_close = np.abs(df['Low'] - df['Close'].shift())
     return pd.concat([high_low, high_close, low_close], axis=1).max(axis=1).rolling(window=period).mean()
 
-# 🎯 স্ট্র্যাটেজি ও ক্যান্ডেল ডাটা অ্যানালাইসিস ফাংশন
+# 🎯 ৫ মিনিটের চার্ট ডাটা অ্যানালাইসিস ফাংশন
 def generate_signal(ticker_symbol, display_name):
     try:
+        # 📊 চার্ট অ্যানালাইসিস হচ্ছে ৫ মিনিটের (interval=5m) ক্যান্ডেলের ওপর ভিত্তি করে
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=5d&interval=5m"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
@@ -117,18 +116,18 @@ def generate_signal(ticker_symbol, display_name):
         
         if pd.isna(rsi_val) or pd.isna(atr_val) or pd.isna(adx_val): return "NO_SIGNAL"
 
-        # ট্রেন্ড স্ট্রেংথ ফিল্টার
-        if adx_val < 25: return "NO_SIGNAL" 
+        # ট্রেন্ড স্ট্রেংথ ফিল্টার (সিগন্যাল ফ্রিকোয়েন্সি ঠিক রাখতে ২০ করা হয়েছে)
+        if adx_val < 20: return "NO_SIGNAL" 
 
         direction = None
-        # 🟢 UP সিগন্যাল শর্ত
-        if ema_f > ema_s and rsi_val > 53 and latest['High'] >= prev['High']:
+        # 🟢 UP সিগন্যাল কন্ডিশন
+        if ema_f > ema_s and rsi_val > 50:
             direction = "UP"
             sl, tp1, tp2 = price - (atr_val * 1.5), price + (atr_val * 1.5), price + (atr_val * 3.0)
             quotex_exit = price + (atr_val * 0.4)
             strength = int(min(rsi_val + 20, 98))
-        # 🔴 DOWN সিগন্যাল শর্ত
-        elif ema_f < ema_s and rsi_val < 47 and latest['Low'] <= prev['Low']:
+        # 🔴 DOWN সিগন্যাল কন্ডিশন
+        elif ema_f < ema_s and rsi_val < 50:
             direction = "DOWN"
             sl, tp1, tp2 = price + (atr_val * 1.5), price - (atr_val * 1.5), price - (atr_val * 3.0)
             quotex_exit = price - (atr_val * 0.4)
@@ -146,7 +145,6 @@ def generate_signal(ticker_symbol, display_name):
     except:
         return "NO_SIGNAL"
 
-# আপনার ট্র্যাকিং পেয়ার লিস্ট (মোট ২০টি গুরুত্বপূর্ণ পেয়ার স্ক্র্যাপ করার স্পিড বাড়ানোর জন্য অপ্টিমাইজড)
 pairs_to_track = {
     "EURUSD=X": "EUR-USD", "GBPUSD=X": "GBP-USD", "USDJPY=X": "USD-JPY", "USDCHF=X": "USD-CHF",
     "AUDUSD=X": "AUD-USD", "USDCAD=X": "USD-CAD", "NZDUSD=X": "NZD-USD", "EURGBP=X": "EUR-GBP",
@@ -155,30 +153,28 @@ pairs_to_track = {
     "AUDJPY=X": "AUD-JPY", "AUDCAD=X": "AUD-CAD", "XAUUSD=X": "XAU-USD"
 }
 
-# ফেক ওয়েব সার্ভার ব্যাকগ্রাউন্ডে চালু করা
 threading.Thread(target=run_fake_server, daemon=True).start()
-print("Kanak AI Bot initialized for Mandatory 5-Minute Cycles...")
+print("Kanak AI Bot: 5M Analysis with 3-Minute Updates Started...")
 
-# ⏱️ মেইন রিয়েল-টাইম ৫ মিনিটের ক্লোজিং লুপ
+# ⏱️ মেইন রিয়েল-টাইম ৩ মিনিটের টেলিগ্রাম লুপ
 while True:
     try:
         current_session = get_current_forex_sessions()
         now_bst = datetime.utcnow() + timedelta(hours=6)
         current_time = now_bst.strftime("%I:%M %p")
         
-        print(f"\n🔄 5-MIN CYCLE SCANNING STARTED AT {current_time}")
+        print(f"\n🔄 SCANNING STARTED AT {current_time} (5M Four-Chart Data)")
         
         no_signal_pairs = [] 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         
         for ticker, display_name in pairs_to_track.items():
-            time.sleep(1.2) # আইপি ব্লকিং এড়াতে সেফটি ডিলয়
+            time.sleep(1.2) # সেফটি ডিলে
             result = generate_signal(ticker, display_name)
             
-            if isinstance(result, dict): # সিগন্যাল পাওয়া গেলে সাথে সাথে পুশ
+            if isinstance(result, dict): # সিগন্যাল পেলে সাথে সাথে চ্যানেলে পুশ
                 emoji = "🟢" if result['direction'] == "UP" else "🔴"
                 
-                # ফরেক্স মেসেজ ফরম্যাট
                 forex_message = (
                     f"📊 <b>Forex Signal Update - {current_time}</b>\n\n"
                     f"🎯 <b>{display_name}</b> - {emoji} {result['direction']}\n\n"
@@ -187,7 +183,6 @@ while True:
                     f"💡 <b>AI টিপস:</b> {result['tip']}\n\n#{display_name.replace('-', '_')} #Forex\n🌐 <b>Active Session:</b> <code>{current_session}</code>"
                 )
                 
-                # কোটেক্স মেসেজ ফরম্যাট
                 quotex_message = (
                     f"📱 <b>Quotex Fast Binary Signals - {current_time}</b>\n\n"
                     f"📊 <b>Quotex | {display_name}</b>\n\n"
@@ -204,10 +199,9 @@ while True:
                 requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": quotex_message, "parse_mode": "HTML"}, timeout=10)
                 print(f"   🔥 Signal sent for {display_name}")
             else:
-                # সিগন্যাল না পাওয়া পেয়ারগুলো লিস্টে জমা হবে
                 no_signal_pairs.append(display_name)
 
-        # 📊 ৫ মিনিট শেষ হওয়ার বাধ্যতামূলক মার্কেট আপডেট রিপোর্ট (যা আপনি চেইন টাইমে চেয়েছেন)
+        # 📊 বাধ্যতামূলক মার্কেট আপডেট রিপোর্ট (যা ঠিক ৩ মিনিট পর পর চ্যানেলে আসবেই)
         report_message = f"🔄 <b>Market Scan Update - {current_time}</b>\n"
         report_message += f"🌐 Active Session: <code>{current_session}</code>\n\n"
         report_message += f"⚠️ <b>নিচের পেয়ারগুলোতে সিগনাল এখনও তৈরি হয় নাই বা পাওয়া যাচ্ছে না:</b>\n"
@@ -217,15 +211,14 @@ while True:
         else:
             report_message += "<i>সবগুলো পেয়ারেই সিগন্যাল চলমান!</i>\n\n"
             
-        report_message += "🤖 <i>বট পরবর্তী ক্যান্ডেল ক্লোজিং ও ৫ মিনিট পর রি-স্ক্যানের জন্য প্রস্তুত হচ্ছে...</i>"
+        report_message += "🤖 <i>বট ৫ মিনিটের ক্যান্ডেল অ্যানালাইসিস করে প্রতি ৩ মিনিট পর পর আপডেট দিচ্ছে...</i>"
         
-        # রিপোর্ট মেসেজটি চ্যানেলে পাঠানো হচ্ছে (যাতে প্রতি ৫ মিনিট পর পর চ্যানেলে মেসেজ আসেই)
         requests.post(url, json={"chat_id": FOREX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
         requests.post(url, json={"chat_id": QUOTEX_CHAT_ID, "text": report_message, "parse_mode": "HTML"}, timeout=10)
-        print("✅ 5-Minute Mandatory Market Report Pushed successfully!")
+        print("✅ 3-Minute Update Report Pushed to Telegram Channels!")
                 
     except Exception as e:
         print(f"Loop error: {e}")
         
-    # ঠিক ৫ মিনিট (৩০০ সেকেন্ড) পর পর লুপটি পুনরায় রান হবে
-    time.sleep(300)
+    # ⏱️ ঠিক ৩ মিনিট (১৮০ সেকেন্ড) পর পর মেইন লুপটি পুনরায় রান হবে
+    time.sleep(180)
